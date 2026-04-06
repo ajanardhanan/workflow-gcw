@@ -1,0 +1,255 @@
+# Google Cloud Workflows - Ticket Lifecycle
+# Orchestrates: Create → Assign → Update → Close → Rate
+# Compatible with ticket-api-server on Cloud Run
+
+main:
+  params: [input]
+  steps:
+    - init:
+        assign:
+          - project_id: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - api_base_url: "https://ticket-api-server-421581751516.us-central1.run.app/api"
+          - workflow_id: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+
+    - logStart:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Starting Ticket Lifecycle Workflow - " + workflow_id}
+          data:
+            title: ${input.title}
+            priority: ${input.priority}
+            agentId: ${input.agentId}
+            rating: ${input.rating}
+
+    # Step 1: Create Ticket
+    - createTicket:
+        try:
+          call: http.post
+          args:
+            url: ${api_base_url + "/tickets"}
+            auth:
+              type: OIDC
+            headers:
+              Content-Type: "application/json"
+            body:
+              title: ${input.title}
+              description: ${input.description}
+              priority: ${input.priority}
+            timeout: 30
+          result: createTicketResponse
+        retry:
+          predicate: ${http.default_retry}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 10
+            multiplier: 2
+
+    - logTicketCreated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Ticket created successfully - ID: " + createTicketResponse.body.id}
+          data:
+            ticketId: ${createTicketResponse.body.id}
+            status: ${createTicketResponse.body.status}
+            step: "CREATED"
+
+    - extractTicketId:
+        assign:
+          - ticketId: ${createTicketResponse.body.id}
+          - ticketTitle: ${createTicketResponse.body.title}
+
+    # Email notification: Ticket Created
+    - logEmailTicketCreated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: "📧 EMAIL NOTIFICATION - Ticket Created"
+          data:
+            to: "akjanardhan@gmail.com"
+            subject: ${"Ticket #" + ticketId + " Created"}
+            body: ${"Ticket created: " + ticketTitle + " (ID: " + ticketId + ")"}
+
+    # Step 2: Assign Ticket
+    - assignTicket:
+        try:
+          call: http.put
+          args:
+            url: ${api_base_url + "/tickets/" + ticketId + "/assign"}
+            auth:
+              type: OIDC
+            headers:
+              Content-Type: "application/json"
+            body:
+              agentId: ${input.agentId}
+            timeout: 30
+          result: assignTicketResponse
+        retry:
+          predicate: ${http.default_retry}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 10
+            multiplier: 2
+
+    - logTicketAssigned:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Ticket assigned successfully - Agent: " + assignTicketResponse.body.assignedAgentId}
+          data:
+            ticketId: ${ticketId}
+            agentId: ${assignTicketResponse.body.assignedAgentId}
+            status: ${assignTicketResponse.body.status}
+            step: "ASSIGNED"
+
+    # Email notification: Ticket Assigned
+    - logEmailTicketAssigned:
+        call: sys.log
+        args:
+          severity: INFO
+          text: "📧 EMAIL NOTIFICATION - Ticket Assigned"
+          data:
+            to: "akjanardhan@gmail.com"
+            subject: ${"Ticket #" + ticketId + " Assigned"}
+            body: ${"Ticket assigned to agent " + assignTicketResponse.body.assignedAgentId}
+
+    # Step 3: Update Ticket to RESOLVED
+    - updateTicket:
+        try:
+          call: http.put
+          args:
+            url: ${api_base_url + "/tickets/" + ticketId}
+            auth:
+              type: OIDC
+            headers:
+              Content-Type: "application/json"
+            body:
+              status: "RESOLVED"
+            timeout: 30
+          result: updateTicketResponse
+        retry:
+          predicate: ${http.default_retry}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 10
+            multiplier: 2
+
+    - logTicketUpdated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Ticket updated successfully - Status: " + updateTicketResponse.body.status}
+          data:
+            ticketId: ${ticketId}
+            status: ${updateTicketResponse.body.status}
+            step: "UPDATED"
+
+    # Email notification: Ticket Updated
+    - logEmailTicketUpdated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: "📧 EMAIL NOTIFICATION - Ticket Updated"
+          data:
+            to: "akjanardhan@gmail.com"
+            subject: ${"Ticket #" + ticketId + " Updated"}
+            body: ${"Ticket status updated to " + updateTicketResponse.body.status}
+
+    # Step 4: Close Ticket
+    - closeTicket:
+        try:
+          call: http.put
+          args:
+            url: ${api_base_url + "/tickets/" + ticketId + "/close"}
+            auth:
+              type: OIDC
+            timeout: 30
+          result: closeTicketResponse
+        retry:
+          predicate: ${http.default_retry}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 10
+            multiplier: 2
+
+    - logTicketClosed:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Ticket closed successfully"}
+          data:
+            ticketId: ${ticketId}
+            status: ${closeTicketResponse.body.status}
+            step: "CLOSED"
+
+    # Email notification: Ticket Closed
+    - logEmailTicketClosed:
+        call: sys.log
+        args:
+          severity: INFO
+          text: "📧 EMAIL NOTIFICATION - Ticket Closed"
+          data:
+            to: "akjanardhan@gmail.com"
+            subject: ${"Ticket #" + ticketId + " Closed"}
+            body: ${"Ticket has been closed"}
+
+    # Step 5: Rate Ticket
+    - rateTicket:
+        try:
+          call: http.post
+          args:
+            url: ${api_base_url + "/tickets/" + ticketId + "/rate"}
+            auth:
+              type: OIDC
+            headers:
+              Content-Type: "application/json"
+            body:
+              score: ${input.rating}
+              feedback: ${"Workflow execution completed via Google Cloud Workflows"}
+            timeout: 30
+          result: rateTicketResponse
+        retry:
+          predicate: ${http.default_retry}
+          max_retries: 3
+          backoff:
+            initial_delay: 1
+            max_delay: 10
+            multiplier: 2
+
+    - logTicketRated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: ${"Ticket rated successfully - Score: " + string(rateTicketResponse.body.score)}
+          data:
+            ticketId: ${ticketId}
+            ratingId: ${rateTicketResponse.body.id}
+            score: ${rateTicketResponse.body.score}
+            step: "RATED"
+
+    # Email notification: Ticket Rated
+    - logEmailTicketRated:
+        call: sys.log
+        args:
+          severity: INFO
+          text: "📧 EMAIL NOTIFICATION - Ticket Rated"
+          data:
+            to: "akjanardhan@gmail.com"
+            subject: ${"Ticket #" + ticketId + " Rated"}
+            body: ${"Ticket rated with score " + string(rateTicketResponse.body.score) + "/5"}
+
+    # Return final result
+    - returnResult:
+        return:
+          ticketId: ${ticketId}
+          status: ${closeTicketResponse.body.status}
+          agentId: ${assignTicketResponse.body.assignedAgentId}
+          rating: ${rateTicketResponse.body.score}
+          ratingId: ${rateTicketResponse.body.id}
+          workflowStep: "RATED"
+          executionId: ${workflow_id}
