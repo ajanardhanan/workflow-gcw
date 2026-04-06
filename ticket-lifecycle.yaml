@@ -15,7 +15,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Starting Ticket Lifecycle Workflow - " + workflow_id}
+          text: '${"Starting Ticket Lifecycle Workflow - " + workflow_id}'
           data:
             title: ${input.title}
             priority: ${input.priority}
@@ -27,7 +27,7 @@ main:
         try:
           call: http.post
           args:
-            url: ${api_base_url + "/tickets"}
+            url: '${api_base_url + "/tickets"}'
             auth:
               type: OIDC
             headers:
@@ -50,7 +50,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Ticket created successfully - ID: " + createTicketResponse.body.id}
+          text: '${"Ticket created successfully - ID: " + createTicketResponse.body.id}'
           data:
             ticketId: ${createTicketResponse.body.id}
             status: ${createTicketResponse.body.status}
@@ -69,15 +69,15 @@ main:
           text: "📧 EMAIL NOTIFICATION - Ticket Created"
           data:
             to: "akjanardhan@gmail.com"
-            subject: ${"Ticket #" + ticketId + " Created"}
-            body: ${"Ticket created: " + ticketTitle + " (ID: " + ticketId + ")"}
+            subject: '${"Ticket #" + ticketId + " Created"}'
+            body: '${"Ticket created: " + ticketTitle + " (ID: " + ticketId + ")"}'
 
     # Step 2: Assign Ticket
     - assignTicket:
         try:
           call: http.put
           args:
-            url: ${api_base_url + "/tickets/" + ticketId + "/assign"}
+            url: '${api_base_url + "/tickets/" + ticketId + "/assign"}'
             auth:
               type: OIDC
             headers:
@@ -98,7 +98,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Ticket assigned successfully - Agent: " + assignTicketResponse.body.assignedAgentId}
+          text: '${"Ticket assigned successfully - Agent: " + assignTicketResponse.body.assignedAgentId}'
           data:
             ticketId: ${ticketId}
             agentId: ${assignTicketResponse.body.assignedAgentId}
@@ -113,15 +113,15 @@ main:
           text: "📧 EMAIL NOTIFICATION - Ticket Assigned"
           data:
             to: "akjanardhan@gmail.com"
-            subject: ${"Ticket #" + ticketId + " Assigned"}
-            body: ${"Ticket assigned to agent " + assignTicketResponse.body.assignedAgentId}
+            subject: '${"Ticket #" + ticketId + " Assigned"}'
+            body: '${"Ticket assigned to agent " + assignTicketResponse.body.assignedAgentId}'
 
     # Step 3: Update Ticket to RESOLVED
     - updateTicket:
         try:
           call: http.put
           args:
-            url: ${api_base_url + "/tickets/" + ticketId}
+            url: '${api_base_url + "/tickets/" + ticketId}'
             auth:
               type: OIDC
             headers:
@@ -142,7 +142,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Ticket updated successfully - Status: " + updateTicketResponse.body.status}
+          text: '${"Ticket updated successfully - Status: " + updateTicketResponse.body.status}'
           data:
             ticketId: ${ticketId}
             status: ${updateTicketResponse.body.status}
@@ -156,15 +156,15 @@ main:
           text: "📧 EMAIL NOTIFICATION - Ticket Updated"
           data:
             to: "akjanardhan@gmail.com"
-            subject: ${"Ticket #" + ticketId + " Updated"}
-            body: ${"Ticket status updated to " + updateTicketResponse.body.status}
+            subject: '${"Ticket #" + ticketId + " Updated"}'
+            body: '${"Ticket status updated to " + updateTicketResponse.body.status}'
 
     # Step 4: Close Ticket
     - closeTicket:
         try:
           call: http.put
           args:
-            url: ${api_base_url + "/tickets/" + ticketId + "/close"}
+            url: '${api_base_url + "/tickets/" + ticketId + "/close"}'
             auth:
               type: OIDC
             timeout: 30
@@ -181,7 +181,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Ticket closed successfully"}
+          text: "Ticket closed successfully"
           data:
             ticketId: ${ticketId}
             status: ${closeTicketResponse.body.status}
@@ -195,22 +195,22 @@ main:
           text: "📧 EMAIL NOTIFICATION - Ticket Closed"
           data:
             to: "akjanardhan@gmail.com"
-            subject: ${"Ticket #" + ticketId + " Closed"}
-            body: ${"Ticket has been closed"}
+            subject: '${"Ticket #" + ticketId + " Closed"}'
+            body: "Ticket has been closed"
 
     # Step 5: Rate Ticket
     - rateTicket:
         try:
           call: http.post
           args:
-            url: ${api_base_url + "/tickets/" + ticketId + "/rate"}
+            url: '${api_base_url + "/tickets/" + ticketId + "/rate"}'
             auth:
               type: OIDC
             headers:
               Content-Type: "application/json"
             body:
               score: ${input.rating}
-              feedback: ${"Workflow execution completed via Google Cloud Workflows"}
+              feedback: "Workflow execution completed via Google Cloud Workflows"
             timeout: 30
           result: rateTicketResponse
         retry:
@@ -225,7 +225,7 @@ main:
         call: sys.log
         args:
           severity: INFO
-          text: ${"Ticket rated successfully - Score: " + string(rateTicketResponse.body.score)}
+          text: '${"Ticket rated successfully - Score: " + string(rateTicketResponse.body.score)}'
           data:
             ticketId: ${ticketId}
             ratingId: ${rateTicketResponse.body.id}
@@ -240,8 +240,8 @@ main:
           text: "📧 EMAIL NOTIFICATION - Ticket Rated"
           data:
             to: "akjanardhan@gmail.com"
-            subject: ${"Ticket #" + ticketId + " Rated"}
-            body: ${"Ticket rated with score " + string(rateTicketResponse.body.score) + "/5"}
+            subject: '${"Ticket #" + ticketId + " Rated"}'
+            body: '${"Ticket rated with score " + string(rateTicketResponse.body.score) + "/5"}'
 
     # Return final result
     - returnResult:
